@@ -1,0 +1,40 @@
+# --------------------
+# Python garbage
+# --------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual envs (if any)
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# --------------------
+# Project run artifacts
+# --------------------
+temp/
+DreamFusion/outputs/
+Graph_Attention_Network/results/
+Composition/*.obj
+Composition/*.mtl
+
+# threestudio / renderer caches
+.threestudio_cache/
+
+# --------------------
+# Local scripts / secrets
+# --------------------
+run_pipeline.sh
+*.log
+
+# IDE/editor configs
+.vscode/
+.idea/
+*.swp
+*.swo

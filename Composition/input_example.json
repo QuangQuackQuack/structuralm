@@ -1,0 +1,22 @@
+{
+  "sample-room/Bedroom-0001": [
+    {
+      "label": "Bed",
+      "bounding_box": [2.0, 0.6, 1.8],
+      "center": [0.0, 0.30, -1.0],
+      "rotation": [1, 0, 0, 0]
+    },
+    {
+      "label": "Cabinet",
+      "bounding_box": [1.2, 1.8, 0.5],
+      "center": [-1.5, 0.9, 1.0],
+      "rotation": [1, 0, 0, 0]
+    },
+    {
+      "label": "Table",
+      "bounding_box": [1.0, 0.75, 0.6],
+      "center": [1.2, 0.38, 0.8],
+      "rotation": [0.7071, 0, 0.7071, 0]
+    }
+  ]
+}
