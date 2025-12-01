@@ -16,7 +16,7 @@ def run_pipeline(test_mode: bool = True):
     print(f"[PIPELINE] run_dir = {run_dir}")
 
     user_prompt = (
-        "An astronaut sitting on a red sofa in a cozy living room,"
+        "A red sofa in a cozy living room,"
         "with a small coffee table in front of the sofa."
     )
 
