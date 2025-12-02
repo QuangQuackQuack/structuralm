@@ -1,200 +1,281 @@
+# 3D Scene Construction Pipeline
 
-# Text-to-3D Scene Pipeline (Multi-Agent → GAT → DreamFusion → Composition)
+End-to-end pipeline that turns a **text scene description** into a **composed 3D scene**:
 
-This repo contains an end-to-end pipeline that turns a **text prompt** into a **3D scene**:
-
-1. A **multi-agent LLM system** builds a structured scene graph.
-2. A **Graph Attention Network (GAT)** predicts 3D positions & rotations.
-3. **DreamFusion (DeepFloyd IF)** generates per-object meshes.
-4. A **composition module** assembles everything into a single `.obj + .mtl` scene.
-
-⚠️ **Status**: research / prototype code. Expect to tweak configs and paths for your own setup.
+- Multi-agent LLM system → structured **scene graph**
+- Graph Attention Network (GAT) → **positions & rotations**
+- DreamFusion (DeepFloyd IF) → **3D meshes** per object
+- Composition module → **final scene OBJ+MTL**
 
 ---
 
-## 1. Requirements
+## 1. Environment & Dependencies
 
 Tested with:
 
-- **Python**: 3.11  
-- **CUDA**: 12.1  
-- **PyTorch**: `2.4.1+cu121`  
-- **GPU**: NVIDIA GPU with at least **8–12 GB VRAM** (more is better; DreamFusion is heavy)
+- **Python**: 3.11
+- **CUDA**: 12.1
+- **PyTorch**: 2.4.1 (with CUDA 12.1)
 
-You will also need:
+### 1.1. Create a conda env (example)
 
-- An LLM endpoint compatible with `langchain-openai` (for the multi-agent system)
-- A Hugging Face account + token (for downloading DeepFloyd IF weights)
+```bash
+conda create -n structuralm python=3.11
+conda activate structuralm
+````
 
----
-
-## 2. Installation
+### 1.2. Install main requirements
 
 From the repo root:
 
 ```bash
-# 1) (Recommended) create & activate a virtualenv / conda env
-# conda create -n construct2 python=3.11
-# conda activate construct2
-
-# 2) Install base dependencies
 pip install -r requirements.txt
+```
 
-# 3) Install extra packages that require a proper Git build context
+### 1.3. Install extra build-heavy dependencies
+
+Some libs (Tiny CUDA NN, nvdiffrast, nerfacc, etc.) are tracked separately in:
+
+* `required_git.txt`
+
+Install them **with** `--no-build-isolation`:
+
+```bash
 pip install -r required_git.txt --no-build-isolation
-````
+```
 
-> 💡 Make sure your PyTorch build matches your CUDA version
-> (e.g. `torch==2.4.1+cu121` for CUDA 12.1).
+> ⚠️ This step may take a while and requires a working CUDA toolchain.
 
 ---
 
-## 3. Configuration
+## 2. Project Structure (High Level)
 
-### 3.1. Create your run script
+* `Multi_Agents/`
 
-This repo tracks a **template** shell script:
+  * LLM-based multi-agent system (planner, entity extraction, attributes, relations, etc.)
+* `Graph_Attention_Network/`
 
-* `run_template.sh` — safe, no keys inside
+  * GNN model that predicts object transforms from the scene graph.
+* `DreamFusion/`
 
-Do **not** edit this directly. Instead:
+  * DreamFusion (DeepFloyd IF) setup for text-to-3D.
+  * Exports OBJ+MTL meshes per object prompt.
+* `Composition/`
+
+  * `SceneOrchestrator` that:
+
+    * Loads OBJ/MTL assets
+    * Scales/rotates/translates them from GAT output
+    * Applies simple stacking / floor alignment
+    * Exports a combined scene OBJ+MTL
+* `src/complete_pipeline/`
+
+  * `main.py`: pipeline entrypoint (CLI)
+  * `nodes/`: glue code between components (multi-agents, GAT, DreamFusion, compositions)
+  * `utils/`: helpers (filesystem paths, etc.)
+* `temp/`
+
+  * Per-run working directory: intermediate JSONs, meshes, final scene, etc. (git-ignored)
+
+---
+
+## 3. Configuring the Runner Script
+
+The repo assumes you use a small wrapper script to set API keys and launch the pipeline:
+
+* `run_template.sh` – **committed**, contains placeholders
+* `run_pipeline.sh` – **git-ignored**, your local version with real keys
+
+### 3.1. Create your local runner
+
+From repo root:
 
 ```bash
 cp run_template.sh run_pipeline.sh
 chmod +x run_pipeline.sh
 ```
 
-Then open `run_pipeline.sh` and fill in your own values:
+Edit `run_pipeline.sh` and fill in your keys:
 
 ```bash
-export MY_LLM_API_KEY="sk-..."                 # your LLM API key
-export MY_LLM_BASE_URL="https://provider/"     # your LLM base URL
-export SCENE_MODEL_NAME="Llama-3.3-70B-Instruct"  # or your model name
-export MY_HUGGINGFACE_TOKEN="hf_..."           # HF token for DeepFloyd IF
+export MY_LLM_API_KEY="sk-...your-key..."
+export MY_LLM_BASE_URL="https://your-provider/"
+export SCENE_MODEL_NAME="Llama-3.3-70B-Instruct"
+export MY_HUGGINGFACE_TOKEN="hf_...your-token..."
 ```
 
-> `run_pipeline.sh` is **git-ignored** so your secrets won’t be committed.
+At the bottom it should call:
+
+```bash
+PYTHONPATH=src:. python -m complete_pipeline.main "$@"
+```
+
+> The `"$@"` is important so CLI arguments are passed through.
 
 ---
 
-### 3.2. Set the input prompt
+## 4. Providing the Prompt
 
-The main entrypoint is:
+The pipeline reads the **scene description** from one of:
+
+1. `--prompt "..."` (inline text)
+2. `--prompt-file path/to/file.txt`
+3. If neither is given, it looks for `prompt.txt` in the repo root.
+4. If nothing is found, it falls back to a built-in example.
+
+### 4.1. Easiest workflow: `prompt.txt`
+
+Create a `prompt.txt` at the repo root:
 
 ```text
-src/complete_pipeline/main.py
+A red sofa in a cozy living room, with a small coffee table in front of the sofa.
 ```
 
-Inside, there is a hard-coded test prompt (for now).
-Edit it to whatever scene you want, for example:
-
-```python
-user_prompt = (
-    "An astronaut sitting on a red sofa in a cozy living room, "
-    "with a small coffee table in front of the sofa."
-)
-```
-
-Later you can wire this to a CLI arg or UI; for now it’s simple and explicit.
-
----
-
-## 4. Running the Pipeline
-
-From the repo root:
+Then:
 
 ```bash
 ./run_pipeline.sh
 ```
 
-The script will:
-
-1. Export env vars (LLM + Hugging Face).
-
-2. Run the pipeline with:
-
-   ```bash
-   PYTHONPATH=src:. python -m complete_pipeline.main
-   ```
-
-3. Print a **run_id** and a **total elapsed time** at the end, e.g.:
-
-   ```text
-   [PIPELINE] run_id = 2025-11-30_22-55-33
-   [PIPELINE] run_dir = /.../complete_pipeline/temp/2025-11-30_22-55-33
-   [PIPELINE] Total elapsed time: 00:23:41 (exit code 0)
-   ```
-
 ---
 
-## 5. Outputs & Folder Structure (Quick Overview)
+## 5. Running the Pipeline
 
-For each run, all intermediate artifacts go into:
+### 5.1. Full mode (train DreamFusion on each object)
 
-```text
-temp/<run_id>/
+Requires a strong GPU with enough VRAM.
+
+```bash
+./run_pipeline.sh \
+  --prompt-file prompt.txt
 ```
 
-Rough layout:
+This runs:
 
-* `temp/<run_id>/multi_agents/`
+1. **Multi-Agent System**
 
-  * `scene_graph.json` – LLM-generated scene graph
-  * `pipeline_scene.json` – structured internal scene representation
-  * `traces.json` – per-agent debugging traces
-* `temp/<run_id>/graph_attention_network/`
+   * Planner → builds internal plan
+   * Entity Extraction → nodes (sofa, table, etc.)
+   * Attribute Extraction → color/material/style
+   * Relational Inference → relations (`in_front_of`, `on_top_of`, etc.)
+   * Attribute Enrichment (optional, see below)
+   * Size & Scale → dimensions
+   * Graph Formalization → final scene graph JSON
 
-  * `scene_for_gat.json` – input graph for GAT
-  * `gat_output.json` – predicted positions & rotations
-  * `pipeline_scene_after_gat.json` – scene updated with GAT results
-* `temp/<run_id>/dreamfusion/`
+2. **Graph Attention Network (GAT)**
 
-  * `<object_label>_<index>.obj/.mtl` – meshes generated by DreamFusion
-* `temp/<run_id>/compositions/`
+   * Predicts **position + rotation** for each object.
 
-  * `pos.json` – composition input (bounding boxes, centers, rotations)
-  * `scene_001.obj` / `scene_001.mtl` – **final composed scene**
+3. **DreamFusion**
 
-That final `scene_001.obj` + `scene_001.mtl` is what you import into Blender, Unity, etc.
+   * For each object:
+
+     * Uses `prompt` (e.g. `"red cozy fabric sofa"`) to train a 3D asset.
+     * Saves runs under `DreamFusion/outputs/dreamfusion-if/`
+     * Exports OBJ/MTL to the temp run dir:
+
+       * `temp/<run_id>/dreamfusion/<Label>.obj`
+       * `temp/<run_id>/dreamfusion/<Label>.mtl`
+
+4. **Composition**
+
+   * Builds a `pos.json` from the GAT output + mesh info.
+   * Uses `SceneOrchestrator` to:
+
+     * Load each DreamFusion OBJ/MTL
+     * Apply scale/rotation/translation
+     * Apply simple floor + stacking logic
+     * Export:
+
+       * `temp/<run_id>/compositions/scene_001.obj`
+       * `temp/<run_id>/compositions/scene_001.mtl`
+
+5. **Final summary**
+
+   * `temp/<run_id>/final_pipeline_scene.json` contains the final structured representation plus composition metadata.
+
+### 5.2. Test mode (re-use existing DreamFusion runs)
+
+If you already have DreamFusion runs for your labels and just want to re-compose, you can tell the pipeline to **not train new models**, but instead re-use cached runs:
+
+```bash
+./run_pipeline.sh \
+  --prompt "A red sofa in a cozy living room, with a small coffee table in front of the sofa." \
+  --test
+```
+
+This sets `test_mode=True`, so `DreamFusion`:
+
+* skips training,
+* looks for matching runs in `DreamFusion/outputs/dreamfusion-if`,
+* exports meshes from the latest matching run for each object label.
 
 ---
 
-## 6. Pipeline Stages (Very Short Summary)
+## 6. Attribute Enrichment Toggle
 
-You can fill this out more later; for now:
+By default, the **Attribute Enrichment Agent** is **enabled** (it slightly elaborates the scene prompt).
 
-1. **Multi-Agent Scene Graph (LangGraph + LLM)**
+To **disable** enrichment and use the original prompt as-is:
 
-   * Enriches the user prompt.
-   * Extracts objects and relationships.
-   * Estimates real-world sizes and room dimensions.
-   * Produces a normalized scene graph.
+```bash
+./run_pipeline.sh --prompt-file prompt.txt --no-enrich
+```
 
-2. **Graph Attention Network (GAT) Layout Module**
+Internally this calls:
 
-   * Takes the scene graph as a PyTorch Geometric graph.
-   * Predicts each object’s 3D position & rotation.
-   * Writes predictions into a JSON (`gat_output.json`).
-
-3. **DreamFusion (DeepFloyd IF-based)**
-
-   * For each object label + prompt, trains a NeRF-style implicit model.
-   * Exports a textured mesh (`model.obj/.mtl`) per object.
-   * Pipeline copies these into `temp/<run_id>/dreamfusion`.
-
-4. **Composition & Export**
-
-   * Reads GAT predictions + DreamFusion meshes.
-   * Scales, rotates, and places each object.
-   * Applies simple gravity/stacking so objects rest on a common floor.
-   * Exports a single unified **scene OBJ+MTL**.
+```python
+run_pipeline(
+    test_mode=...,
+    user_prompt=...,
+    enrich_scene=False,
+)
+```
 
 ---
 
-## 7. Notes
+## 7. Outputs & Paths (Where to look)
 
-* Training DreamFusion is **slow** and GPU-intensive. If you only want to test the rest of the pipeline, you can temporarily disable the DreamFusion step (see `main_without_dream.py` or comment that node).
-* The code is organized to keep:
+For each run, a timestamped directory is created under:
 
-  * reusable modules in `src/complete_pipeline/`
-  * external components in their own folders (`Multi_Agents/`, `Graph_Attention_Network/`, `DreamFusion/`, `Composition/`)
+```text
+temp/<YYYY-MM-DD_HH-MM-SS>/
+```
+
+Inside:
+
+* `multi_agents/`
+
+  * `scene_graph.json` – final graph from LLM pipeline
+  * `pipeline_scene.json` – internal PipelineScene representation
+  * `raw_result.json` – full multi-agent traces and intermediate outputs
+* `graph_attention_network/`
+
+  * `scene_for_gat.json`
+  * `gat_output.json`
+  * `pipeline_scene_after_gat.json`
+* `dreamfusion/`
+
+  * `<Label>.obj` / `<Label>.mtl` – final per-object meshes copied from DreamFusion
+* `compositions/`
+
+  * `pos.json` – layout for the SceneOrchestrator
+  * `scene_001.obj` / `scene_001.mtl` – final composed scene
+  * `pipeline_scene_after_compositions.json` – pipeline scene with composition metadata
+* `final_pipeline_scene.json`
+
+  * Master summary of the entire run
+
+---
+
+## 8. Notes
+
+* `run_pipeline.sh` is **not** committed; use `run_template.sh` as a safe template.
+* Large outputs (e.g. DreamFusion training logs/runs, temp folders) are **git-ignored**.
+* `__pycache__/` directories and other build artefacts are also ignored.
+
+You can customize prompts, toggles, and intermediate behavior without touching the core pipeline code—just through:
+
+* `prompt.txt` / `--prompt` / `--prompt-file`
+* `--test` (DreamFusion behaviour)
+* `--no-enrich` (LLM enrichment behaviour)
