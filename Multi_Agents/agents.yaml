@@ -68,7 +68,6 @@ entity_extraction: |
       - "a floor lamp" → label: "Floor_lamp"
       - "a TV" → label: "TV"
       - "a pillow" → label: "Pillow"
-      - etc.
     - For human / humanoid characters:
       - If the text indicates posture, you MAY use:
         - "human_sitting" (e.g. "an astronaut sitting on the sofa")
@@ -77,15 +76,27 @@ entity_extraction: |
       - Otherwise, if posture is unclear, you may still use "Other".
     - If no label in the list fits well, set `label` to "Other":
       - "a computer" → name: "computer", label: "Other"
-      - "astronaut" with no desire to treat as a posture class → label: "Other"
+      - "astronaut" with no desire to treat as a posture class → label: "Other".
 
-  - VERY IMPORTANT:
-    - `name` is the human-readable phrase for the entity (e.g. "astronaut", "coffee table").
-    - `label` is the internal class token from the list above.
-    - Do NOT force `name` to match `label`. They can differ
-      (e.g. name: "rug", label: "Carpet").
+  VERY IMPORTANT – how to set `name`:
+  - `name` is the human-readable NOUN PHRASE for the entity (e.g. "sofa", "coffee table").
+  - You MUST NOT include visual adjectives (color, size, style, material) in `name`.
+    These belong to attributes later, NOT in `name`.
 
-  Things to AVOID:
+    Correct:
+      - Prompt: "a red sofa" → name: "sofa", label: "Sofa"
+      - Prompt: "a small wooden coffee table" → name: "coffee table", label: "Table"
+      - Prompt: "a cozy fabric armchair" → name: "armchair", label: "Armchair"
+
+    Incorrect (DO NOT DO THIS):
+      - name: "red sofa"
+      - name: "small wooden coffee table"
+      - name: "cozy fabric armchair"
+
+  - Multi-word names are fine if they are part of the base noun (e.g. "coffee table",
+    "bedside table", "floor lamp") but still without adjectives.
+
+  Things to AVOID as nodes:
     - Adjectives (“red”, “cozy”, “simple”, “wooden”) → NOT entities.
       These will be handled later as attributes.
     - Actions (“sitting”, “holding”, “lying”) → NOT entities.
@@ -99,7 +110,7 @@ entity_extraction: |
     "nodes": [
       {
         "id": "short_snake_case_identifier",
-        "name": "human-readable name",
+        "name": "human-readable name WITHOUT adjectives",
         "category": "character|object|environment|lighting|other",
         "label": "Armchair|Banana|Basket|Bed|Cabinet|Cake|Carpet|Chair|Cup|Easel|Fan|Fridge|Floor_lamp|Laptop_close|Laptop_open|Lighting|Mirror|Monkey|Panda|Piano|Picture|Pier|Pillow|Rabbit|Sofa|TV|Table|Test|Toy|Tree|Vase|Wardrobe|Washingmachine|human_lying|human_sitting|human_standing|Other"
       }
@@ -115,10 +126,11 @@ entity_extraction: |
 
   Rules:
   - `id` must be deterministic and unique (lowercase_snake_case).
-  - `name` must match how a human refers to the object (e.g. "bedside table", "desk lamp").
-  - Do NOT include attributes (color, material, style) here.
+  - `name` must match how a human refers to the object, but with adjectives removed.
+  - Do NOT include attributes (color, material, style) in `name`.
   - Do NOT infer relational meaning (no "on top of", "next to" here).
   - Do NOT include comments or text outside the JSON.
+
 
 
 relational_inference: |
@@ -133,12 +145,47 @@ relational_inference: |
 
   You must:
   1. Identify directional relations (A → B).
-  2. Normalize relations to this set only (choose only relation below for each objects):
+  2. Normalize relations to this set only (choose only relation below for each pair of objects):
     - on_top_of
     - above
     - under
+    - left_of
+    - right_of
+    - in_front_of
+    - behind
     - facing
     - next_to
+
+  VERY IMPORTANT – how to choose the correct relation:
+  - Use **on_top_of** ONLY when:
+    - One object is clearly resting ON the surface of another:
+      - Phrases: "on", "on top of", "resting on", "sitting on", "lying on", "placed on".
+      - Example: "a lamp on the table" → lamp on_top_of table.
+
+  - Use **above / under** ONLY for VERTICAL separation without direct support/contact:
+    - "above", "over", "hanging above", "floating above", "below", "underneath" without contact.
+    - Example: "a ceiling lamp above the table" → lamp above table.
+    - Example: "a rug under the table" → rug under table.
+
+  - Use **in_front_of / behind** ONLY for DEPTH (front/back) relationships:
+    - Phrases: "in front of", "in front", "ahead of" → in_front_of.
+    - Phrases: "behind", "at the back of", "at the back" → behind.
+    - Example: "a coffee table in front of the sofa" →
+      - source: coffee_table
+      - target: sofa
+      - relation: "in_front_of".
+    - Do NOT map "in front of" to "above" or "on_top_of".
+
+  - Use **left_of / right_of** for horizontal left/right in the scene:
+    - Phrases: "to the left of", "on the left side of" → left_of.
+    - Phrases: "to the right of", "on the right side of" → right_of.
+
+  - Use **next_to** for adjacency without a clear left/right/front/back direction:
+    - Phrases: "next to", "beside", "by", "close to", "near".
+    - Example: "a plant next to the sofa" → plant next_to sofa.
+
+  - Use **facing** when one object is oriented towards another:
+    - Phrases: "facing", "looking at", "turned towards".
 
   3. You MUST ground relations DIRECTLY in the prompt; do NOT hallucinate.
 
@@ -189,6 +236,14 @@ attribute_enrichment: |
       (e.g. "cozy", "warm lighting") or high-level descriptions rather than
       new concrete items.
 
+  Spatial relations – DO NOT CHANGE THEM:
+  - Any explicit spatial relation in the original prompt must be preserved in meaning
+    and wording:
+    - If the prompt says "in front of the sofa", your enrichment MUST still say
+      "in front of the sofa" (or an equivalent phrasing that clearly means the same).
+    - Do NOT change "in front of" into "above", "on top of", or "over".
+    - Do NOT reverse relations (do not move objects around).
+
   Notes on naming vs labels:
   - You do NOT need to mention the label names themselves.
   - Just describe the objects naturally in text (e.g. "a soft carpet",
@@ -209,6 +264,7 @@ attribute_enrichment: |
   - Use one or a few sentences, in plain text.
   - Do NOT output JSON.
   - Do NOT explain your reasoning.
+
 
 
 
@@ -305,17 +361,27 @@ attribute_extraction: |
   For EACH node, infer and assign the following visual attributes when possible:
     - color: basic color name (e.g. "red", "blue", "green", "white", "black",
       "brown", "gray", "beige"). If unknown, use null.
-    - material: simple material category (e.g. "wood", "fabric", "metal",
+    - material: simple material category in adjective form (e.g. "wooden", "fabric", "metal",
       "glass", "plastic", "leather"). If unknown, use null.
     - style: simple style descriptor (e.g. "modern", "simple", "classic",
       "old", "minimalist", "cozy"). If unknown, use null.
 
+  VERY IMPORTANT:
+  - The `name` field provided by the Entity Extraction Agent should already be
+    a clean noun phrase without adjectives. You MUST NOT modify it here.
+  - If the description uses phrases like "red sofa" or "small wooden coffee table":
+    - color → "red"
+    - material → "wooden"
+    - style → maybe "cozy" or "modern" if explicitly described.
+  - Do NOT duplicate adjectives across fields or invent multiple conflicting colors.
+    Pick the single best color/material/style if several are mentioned.
+
   Rules:
-  - You MUST preserve all node ids and names exactly as given.
+  - You MUST preserve all node ids exactly as given.
   - Use information from the description FIRST (explicit colors, materials, styles).
   - You MAY make reasonable inferences when not explicitly stated, but keep them plausible
     for the object type (e.g. a "sofa" might plausibly be "fabric", a "wooden table"
-    must be material "wood").
+    must be material "wooden").
   - If you are not confident, prefer null over hallucinated detail.
 
   Output format:
@@ -327,7 +393,7 @@ attribute_extraction: |
         "id": "<existing_node_id>",
         "attributes": {
           "color": "red|null|...",
-          "material": "wood|fabric|metal|glass|plastic|leather|null",
+          "material": "wooden|fabric|metal|glass|plastic|leather|null",
           "style": "modern|simple|classic|old|minimalist|cozy|null"
         }
       }
