@@ -22,7 +22,7 @@ DEFAULT_PROMPT_FILE = ROOT_DIR / "prompt.txt"
 
 def _make_run_dir(run_id: str) -> Path:
     """Create the temp run directory: <repo>/temp/<run_id>."""
-    run_dir = config.TEMP_ROOT / run_id
+    run_dir = config.CACHE_ROOT / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
 
