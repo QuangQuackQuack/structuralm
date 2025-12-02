@@ -5,12 +5,15 @@ from typing import List, Dict, Tuple, Optional
 import quaternion  # pip install numpy-quaternion
 
 class SceneOrchestrator:
-    def __init__(self, floor_size: Tuple[float, float] = (10.0, 10.0)):
+    def __init__(self, floor_size: Tuple[float, float] = (5.0, 5.0)):
         self.floor_size = floor_size
         self.scenes = {}
         self.scene_floor_heights = {}
-        # Lưu trữ nội dung mtl của từng scene để export
         self.scene_materials = {}
+
+        # Pre-rotation quaternion cố định
+        #self.pre_rotation = np.quaternion(0.6899, -0.6899, 0.0, 0.0).normalized()
+        self.pre_rotation = np.quaternion(0.6533, -0.6533, 0.2706, 0.2706).normalized()
 
     def load_obj_with_mtl(self, obj_path: str, object_label: str) -> Dict:
         """
@@ -88,7 +91,10 @@ class SceneOrchestrator:
 
     def transform_object(self, obj_data: Dict, bounding_box: List[float],
                          rotation_quat: np.ndarray, center: np.ndarray):
-        """Transform Vertices và cả Normals."""
+        """
+        Transform Vertices và Normals với pre-rotation.
+        Rotation pipeline: pre_rotation -> input_rotation
+        """
         vertices = obj_data['vertices']
         normals = obj_data['normals']
 
@@ -103,9 +109,10 @@ class SceneOrchestrator:
         scale_factors = np.array(bounding_box) / current_bbox
         transformed_v = vertices_centered * scale_factors
 
-        # Rotate (Quaternion)
-        q = np.quaternion(*rotation_quat).normalized()
-        rot_mat = quaternion.as_rotation_matrix(q)
+        # Rotate: Áp dụng pre-rotation trước, sau đó input rotation
+        q_input = np.quaternion(*rotation_quat).normalized()
+        q_combined = q_input * self.pre_rotation  # Nhân quaternion: input sau * pre trước
+        rot_mat = quaternion.as_rotation_matrix(q_combined)
         transformed_v = transformed_v @ rot_mat.T
 
         # Translate
@@ -116,9 +123,9 @@ class SceneOrchestrator:
         # --- 2. Normals Transformation ---
         # Normals chỉ cần Rotate (không Scale theo cách thường, không Translate)
         if normals is not None and len(normals) > 0:
-            # Rotate normals
+            # Rotate normals với cùng combined quaternion
             transformed_n = normals @ rot_mat.T
-            # Normalize lại để đảm bảo độ dài = 1 (do scale có thể làm méo)
+            # Normalize lại để đảm bảo độ dài = 1
             norms = np.linalg.norm(transformed_n, axis=1, keepdims=True)
             norms = np.where(norms == 0, 1, norms) # Tránh chia 0
             obj_data['normals'] = transformed_n / norms
@@ -196,6 +203,8 @@ class SceneOrchestrator:
     def _realign_objects_to_key(self, objects_data: List[Dict]) -> List[Dict]:
         """Giữ nguyên logic xoay theo vật thể lớn nhất."""
         if not objects_data: return objects_data
+        volumes = [obj['bounding_box'][0] * obj['bounding_box'][1] * obj['bounding_box'][2] for obj in objects_data]
+        key_idx = np.argmax(volumes)
         key_obj = objects_data[0]
         key_quat = np.quaternion(*key_obj['rotation']).normalized()
         correction_quat = key_quat.inverse()
@@ -235,7 +244,7 @@ class SceneOrchestrator:
                     # Load Full (V, VT, VN, MTL)
                     obj_full = self.load_obj_with_mtl(str(obj_file), label)
 
-                    # Transform
+                    # Transform (với pre-rotation được áp dụng bên trong)
                     self.transform_object(
                         obj_full,
                         obj_data['bounding_box'],
