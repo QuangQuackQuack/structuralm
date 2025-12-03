@@ -141,33 +141,43 @@ relational_inference: |
   - List of extracted scene nodes (id + name + category)
 
   Your task:
-  Infer ALL EXPLICIT and IMPLICIT relationships between entities.
+  Infer ALL EXPLICIT and IMPLICIT spatial relationships between entities.
 
   You must:
   1. Identify directional relations (A → B).
-  2. Normalize relations to this set only (choose only relation below for each pair of objects):
-    - on_top_of
-    - above
-    - under
-    - left_of
-    - right_of
-    - in_front_of
-    - behind
-    - facing
-    - in
+  2. Normalize relations to this set ONLY (exact strings):
 
-  VERY IMPORTANT – how to choose the correct relation:
-  - Use **on_top_of** ONLY when:
-    - One object is clearly resting ON the surface of another:
-      - Phrases: "on", "on top of", "resting on", "sitting on", "lying on", "placed on".
-      - Example: "a lamp on the table" → lamp on_top_of table.
+     - on_top_of
+     - above
+     - under
+     - left_of
+     - right_of
+     - in_front_of
+     - behind
+     - facing
+     - in
 
-  - Use **above / under** ONLY for VERTICAL separation without direct support/contact:
-    - "above", "over", "hanging above", "floating above", "below", "underneath" without contact.
+     You MUST NOT output any other relation name.
+     In particular, you MUST NOT output: "next_to", "beside", "near", "close_to", "around", "adjacent_to", or any custom string.
+
+  ─────────────────────────────────────────────────────────
+  HOW TO SELECT THE CORRECT RELATION
+  ─────────────────────────────────────────────────────────
+
+  **Support / contact vs vertical distance**
+
+  - Use **on_top_of** ONLY when one object is clearly resting directly on the surface of another:
+    - Natural language cues: "on", "on top of", "resting on", "sitting on", "lying on", "placed on".
+    - Example: "a lamp on the table" → lamp on_top_of table.
+
+  - Use **above / under** ONLY for vertical separation without direct support/contact:
+    - "above", "over", "hanging above", "floating above", "below", "underneath" (without implying it is resting on).
     - Example: "a ceiling lamp above the table" → lamp above table.
     - Example: "a rug under the table" → rug under table.
 
-  - Use **in_front_of / behind** ONLY for DEPTH (front/back) relationships:
+  **Depth (front/back)**
+
+  - Use **in_front_of / behind** ONLY for front/back (depth) relationships:
     - Phrases: "in front of", "in front", "ahead of" → in_front_of.
     - Phrases: "behind", "at the back of", "at the back" → behind.
     - Example: "a coffee table in front of the sofa" →
@@ -176,15 +186,50 @@ relational_inference: |
       - relation: "in_front_of".
     - Do NOT map "in front of" to "above" or "on_top_of".
 
-  - Use **left_of / right_of** for horizontal left/right in the scene:
+  **Left/right & 'next to' / 'beside' / 'near'**
+
+  - Use **left_of / right_of** for left/right relationships:
     - Phrases: "to the left of", "on the left side of" → left_of.
     - Phrases: "to the right of", "on the right side of" → right_of.
-    - Do NOT map "next_to". It needs to clarify "left_of" or "right_of"
+
+  - VERY IMPORTANT: The relation name **"next_to" is forbidden**.
+    You MUST NEVER output `"next_to"` as a relation.
+
+  - When the language says "next to", "beside", "near to", "close to", "by", or "at the side of"
+    but does NOT specify left or right, you MUST still choose **left_of** or **right_of**.
+
+    Deterministic default rule (to avoid None or invalid relations):
+    - For a phrase of the form: "A next to B", "A beside B", "A near B":
+      - Use: A left_of B
+      - That is: source = A, target = B, relation = "left_of".
+    - If the wording is reversed (e.g. "B has A next to it"), you still choose:
+      - source = A (the neighbor), target = B, relation = "left_of".
+
+    Examples:
+    - "a lamp next to the bed" →
+      - source: lamp
+      - target: bed
+      - relation: "left_of".
+    - "a chair beside the table" →
+      - source: chair
+      - target: table
+      - relation: "left_of".
+
+  **Facing / looking**
 
   - Use **facing** when one object is oriented towards another:
     - Phrases: "facing", "looking at", "turned towards".
+    - Example: "a sofa facing the TV" → sofa facing TV.
 
-  3. You MUST ground relations DIRECTLY in the prompt; do NOT hallucinate.
+  **Containment / inside**
+
+  - Use **in** when one object is clearly inside or contained within another:
+    - Phrases: "in", "inside", "within", "inside of".
+    - Example: "a cup in the cabinet" → cup in cabinet.
+
+  ─────────────────────────────────────────────────────────
+  OUTPUT FORMAT
+  ─────────────────────────────────────────────────────────
 
   Your output MUST be STRICT JSON:
 
@@ -193,17 +238,20 @@ relational_inference: |
       {
         "source": "<node_id>",
         "target": "<node_id>",
-        "relation": "normalized_relation_name"
+        "relation": "on_top_of|above|under|left_of|right_of|in_front_of|behind|facing|in"
       }
     ]
   }
 
   Rules:
-  - Use ONLY node IDs provided.
-  - Relations MUST be directional if applicable.
-  - Relations MUST be in relation set provided.
-  - Never duplicate edges.
-  - No free text. JSON ONLY.
+  - Use ONLY node IDs that actually exist in the node list.
+  - Relations MUST be directional where appropriate:
+    - "A in_front_of B" is different from "B in_front_of A".
+  - Relations MUST be one of the allowed relation names ONLY.
+  - Never duplicate edges (no exact duplicates of source+target+relation).
+  - If NO relations can be grounded from the text, return: {"edges": []}
+  - You MUST NOT output any free text or comments outside the JSON.
+
 
 
 attribute_enrichment: |

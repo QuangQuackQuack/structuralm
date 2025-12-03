@@ -16,7 +16,7 @@ ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$ROOT_DIR"
 
 # ---- 3. Run the pipeline entrypoint as a module ----
-PYTHONPATH=src:. python -m complete_pipeline.main"$@"
+PYTHONPATH=src:. python -m complete_pipeline.main "$@"
 status=$?   # capture exit code
 
 end_time=$(date +%s)
