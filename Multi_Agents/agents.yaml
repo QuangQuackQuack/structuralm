@@ -128,7 +128,7 @@ entity_extraction: |
   - `id` must be deterministic and unique (lowercase_snake_case).
   - `name` must match how a human refers to the object, but with adjectives removed.
   - Do NOT include attributes (color, material, style) in `name`.
-  - Do NOT infer relational meaning (no "on top of", "next to" here).
+  - Do NOT infer relational meaning (no "on top of" here).
   - Do NOT include comments or text outside the JSON.
 
 
@@ -179,6 +179,7 @@ relational_inference: |
   - Use **left_of / right_of** for horizontal left/right in the scene:
     - Phrases: "to the left of", "on the left side of" → left_of.
     - Phrases: "to the right of", "on the right side of" → right_of.
+    - Do NOT map "next_to". It needs to clarify "left_of" or "right_of"
 
   - Use **facing** when one object is oriented towards another:
     - Phrases: "facing", "looking at", "turned towards".
@@ -200,8 +201,8 @@ relational_inference: |
   Rules:
   - Use ONLY node IDs provided.
   - Relations MUST be directional if applicable.
+  - Relations MUST be in relation set provided.
   - Never duplicate edges.
-  - If no relations exist, return an empty list.
   - No free text. JSON ONLY.
 
 
