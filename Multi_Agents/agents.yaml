@@ -154,7 +154,7 @@ relational_inference: |
     - in_front_of
     - behind
     - facing
-    - next_to
+    - in
 
   VERY IMPORTANT – how to choose the correct relation:
   - Use **on_top_of** ONLY when:
