@@ -180,10 +180,6 @@ relational_inference: |
     - Phrases: "to the left of", "on the left side of" → left_of.
     - Phrases: "to the right of", "on the right side of" → right_of.
 
-  - Use **next_to** for adjacency without a clear left/right/front/back direction:
-    - Phrases: "next to", "beside", "by", "close to", "near".
-    - Example: "a plant next to the sofa" → plant next_to sofa.
-
   - Use **facing** when one object is oriented towards another:
     - Phrases: "facing", "looking at", "turned towards".
 
